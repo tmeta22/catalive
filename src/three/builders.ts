@@ -608,11 +608,27 @@ function buildCabinet(c: Ctx, variant: string) {
   const fy1 = bodyTop - 0.002;
   const Wf = W - 2 * sideT;
   const Hf = fy1 - fy0;
-  const fillD = Dc - 0.03;
 
-  const fill = (x0: number, x1: number, y0: number, y1: number) => {
-    if (x1 - x0 < 0.01 || y1 - y0 < 0.01) return;
-    c.box(m.frame, [x1 - x0, y1 - y0, fillD], [(x0 + x1) / 2, (y0 + y1) / 2, zc - 0.012], 0.002);
+  /**
+   * Build the inside of the carcase. The shell already has a back panel, so
+   * the bays only need dividers and shelves. A solid block here made an open
+   * door look like it revealed a slab of timber instead of a cabinet.
+   */
+  const interior = (x0: number, x1: number, y0: number, y1: number, bays = 1) => {
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w < 0.02 || h < 0.02) return;
+    const depth = Math.max(0.06, Dc - 0.07);
+    const z = zc - 0.02;
+    for (let i = 1; i < bays; i++) {
+      const x = x0 + (w * i) / bays;
+      c.box(m.frame, [0.016, h, depth], [x, (y0 + y1) / 2, z], 0.002);
+    }
+    const shelves = h > 0.75 ? 3 : h > 0.4 ? 2 : 1;
+    for (let i = 1; i <= shelves; i++) {
+      const y = y0 + (h * i) / (shelves + 1);
+      c.box(m.frame, [w - 0.014, 0.018, depth], [(x0 + x1) / 2, y, z], 0.002);
+    }
   };
 
   const style = c.str('front') || 'panel';
@@ -693,8 +709,8 @@ function buildCabinet(c: Ctx, variant: string) {
   };
 
   if (variant === 'credenza') {
-    fill(fx0, fx0 + Wf, fy0, fy1);
     const n = Math.max(2, cabinetBays(c.cfg.w, 500));
+    interior(fx0, fx0 + Wf, fy0, fy1, n);
     const layout = c.str('layout');
     if (layout === 'drawers') {
       drawerStack(fx0, Wf, Hf > 0.42 ? 2 : 1, n, fy0, fy1);
@@ -711,30 +727,35 @@ function buildCabinet(c: Ctx, variant: string) {
   } else if (variant === 'media') {
     if (c.flag('openBay')) {
       const sideW = clamp(W * 0.28, 0.3, 0.7);
-      fill(fx0, fx0 + sideW, fy0, fy1);
-      fill(fx0 + Wf - sideW, fx0 + Wf, fy0, fy1);
+      const n = sideW > 0.5 ? 2 : 1;
+      interior(fx0, fx0 + sideW, fy0, fy1, n);
+      interior(fx0 + Wf - sideW, fx0 + Wf, fy0, fy1, n);
       // Open bay: back panel shows, with a slim shelf.
       c.box(m.frame, [Wf - 2 * sideW, 0.018, Dc - 0.03], [0, fy0 + Hf * 0.5, zc - 0.012], 0.002);
-      const n = sideW > 0.5 ? 2 : 1;
       doorRow(fx0, sideW, n, fy0, fy1);
       doorRow(fx0 + Wf - sideW, sideW, n, fy0, fy1);
     } else {
-      fill(fx0, fx0 + Wf, fy0, fy1);
-      doorRow(fx0, Wf, Math.max(2, cabinetBays(c.cfg.w, 550)), fy0, fy1);
+      const n = Math.max(2, cabinetBays(c.cfg.w, 550));
+      interior(fx0, fx0 + Wf, fy0, fy1, n);
+      doorRow(fx0, Wf, n, fy0, fy1);
     }
   } else if (variant === 'wardrobe') {
-    fill(fx0, fx0 + Wf, fy0, fy1);
-    doorRow(fx0, Wf, Math.max(2, cabinetBays(c.cfg.w, 550)), fy0, fy1);
+    const n = Math.max(2, cabinetBays(c.cfg.w, 550));
+    interior(fx0, fx0 + Wf, fy0, fy1, n);
+    // A hanging rail, just under the top shelf.
+    c.cyl(m.accent, 0.012, 0.012, Wf - 0.08, [0, fy0 + Hf * 0.68, zc], 12, [0, 0, Math.PI / 2]);
+    doorRow(fx0, Wf, n, fy0, fy1);
   } else if (variant === 'nightstand') {
     const dr = Math.max(1, c.num('drawers'));
     const open = c.flag('openShelf');
     const lowerH = open ? Hf * 0.32 : 0;
-    fill(fx0, fx0 + Wf, fy0 + lowerH, fy1);
+    interior(fx0, fx0 + Wf, fy0 + lowerH, fy1, 2);
     if (open) c.box(m.frame, [Wf, 0.018, Dc - 0.03], [0, fy0 + lowerH, zc - 0.012], 0.002);
     drawerStack(fx0, Wf, dr, 1, fy0 + lowerH + (open ? 0.012 : 0), fy1);
   } else if (variant === 'dresser') {
-    fill(fx0, fx0 + Wf, fy0, fy1);
-    drawerStack(fx0, Wf, Math.max(3, c.num('rows')), W > 1.3 ? 2 : 1, fy0, fy1);
+    const cols = W > 1.3 ? 2 : 1;
+    interior(fx0, fx0 + Wf, fy0, fy1, cols);
+    drawerStack(fx0, Wf, Math.max(3, c.num('rows')), cols, fy0, fy1);
   }
 
   if (variant === 'wardrobe') {

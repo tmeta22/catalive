@@ -74,6 +74,26 @@ test('every option value builds, stays on size, and changes the model where it s
   }
 });
 
+test('cabinet interiors are hollow, not a solid block', () => {
+  for (const id of ['credenza', 'wardrobe', 'dresser', 'tvUnit', 'nightstand']) {
+    const p = PRODUCTS.find((x) => x.id === id)!;
+    const g = buildFurniture(p, defaultConfig(p), mats);
+    let blockers = 0;
+    g.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry.computeBoundingBox();
+      const size = new THREE.Vector3();
+      mesh.geometry.boundingBox!.getSize(size);
+      // A slab spanning most of the width, height and depth is the old
+      // shortcut that filled the carcase and showed through open doors.
+      if (size.x > 0.5 && size.y > 0.3 && size.z > 0.3) blockers++;
+    });
+    assert.equal(blockers, 0, `${id} has a hollow interior`);
+    disposeGroup(g);
+  }
+});
+
 test('every preset builds at its stated size', () => {
   for (const p of PRODUCTS) {
     for (const pr of p.presets) {
