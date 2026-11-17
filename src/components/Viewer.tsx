@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Box, Ruler } from 'lucide-react';
+import { Box, Ruler, Undo2 } from 'lucide-react';
 import type { Config, Product } from '../data/types';
 import { useApp } from '../lib/app';
+import { hasInteractiveParts, Interaction, partLabelKey } from '../three/interactive';
 import { Studio, webglAvailable, type ViewName } from '../three/studio';
 
 interface Tween {
@@ -27,7 +28,7 @@ export default function Viewer({
   /** Bump to re-frame the piece (e.g. after choosing a standard size). */
   refitKey: number;
 }) {
-  const { t, len } = useApp();
+  const { t, len, toast } = useApp();
   const supported = useMemo(webglAvailable, []);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -43,6 +44,8 @@ export default function Viewer({
   const [view, setView] = useState<ViewName>('three');
   const [guides, setGuides] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [interactive, setInteractive] = useState(false);
+  const interactionRef = useRef<Interaction | null>(null);
 
   cfgRef.current = cfg;
   useEffect(() => {
@@ -105,6 +108,15 @@ export default function Viewer({
     resize();
 
     studio.setProduct(product, cfgRef.current);
+    const interaction = new Interaction(studio.camera);
+    interaction.refresh(studio.piece);
+    interactionRef.current = interaction;
+    setInteractive(hasInteractiveParts(studio.piece));
+    const unbind = interaction.bind(canvas, (part) => {
+      interaction.toggle(part);
+      setTouched(true);
+      toast(`${t(partLabelKey(part.spec.kind))} · ${part.target ? t('interactOpened') : t('interactClosed')}`);
+    });
     const first = studio.poseFor('three');
     studio.camera.position.copy(first.position);
     controls.target.copy(first.target);
@@ -125,6 +137,7 @@ export default function Viewer({
 
     let raf = 0;
     let firstFrame = true;
+    let lastFrame = performance.now();
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       let needs = false;
@@ -132,6 +145,8 @@ export default function Viewer({
       if (dirty.current) {
         dirty.current = false;
         studio.setProduct(product, cfgRef.current);
+        interaction.refresh(studio.piece);
+        setInteractive(hasInteractiveParts(studio.piece));
         // Zoom out if the piece outgrew the frame; never zoom in on its own,
         // so growing a slider visibly grows the piece.
         if (!tween.current) {
@@ -157,6 +172,10 @@ export default function Viewer({
         needs = true;
       }
 
+      const dt = Math.min(0.1, (now - lastFrame) / 1000);
+      lastFrame = now;
+      if (interaction.update(dt)) needs = true;
+
       const moved = controls.update();
       if (moved || needs || firstFrame) {
         studio.render();
@@ -177,11 +196,13 @@ export default function Viewer({
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      unbind();
       controls.removeEventListener('start', stopAuto);
       controls.dispose();
       studio.dispose();
       studioRef.current = null;
       controlsRef.current = null;
+      interactionRef.current = null;
     };
     // The viewer is keyed by product id, so `product` never changes while mounted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,21 +293,36 @@ export default function Viewer({
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          aria-pressed={guides}
-          onClick={() => setGuides((g) => !g)}
-          className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-3 text-[0.8rem] font-semibold shadow-sm backdrop-blur min-h-9 ${
-            guides ? 'bg-indigo text-white' : 'bg-card/90 text-ink-soft hover:text-ink'
-          }`}
-        >
-          <Ruler className="size-4" />
-          <span className="hidden min-[400px]:inline">{t('measurements')}</span>
-        </button>
+        <div className="pointer-events-auto flex gap-1.5">
+          {interactive && (
+            <button
+              type="button"
+              onClick={() => interactionRef.current?.reset()}
+              aria-label={t('interactReset')}
+              className="flex min-h-9 items-center gap-1.5 rounded-full bg-card/90 px-3 text-[0.8rem] font-semibold text-ink-soft shadow-sm backdrop-blur hover:text-ink"
+            >
+              <Undo2 className="size-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-pressed={guides}
+            onClick={() => setGuides((g) => !g)}
+            className={`flex min-h-9 items-center gap-1.5 rounded-full px-3 text-[0.8rem] font-semibold shadow-sm backdrop-blur ${
+              guides ? 'bg-indigo text-white' : 'bg-card/90 text-ink-soft hover:text-ink'
+            }`}
+          >
+            <Ruler className="size-4" />
+            <span className="hidden min-[400px]:inline">{t('measurements')}</span>
+          </button>
+        </div>
       </div>
 
       {ready && !touched && (
-        <div className="anim-fade pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+        <div className="anim-fade pointer-events-none absolute inset-x-0 bottom-3 flex flex-col items-center gap-1.5">
+          {interactive && (
+            <span className="rounded-full bg-indigo px-3.5 py-1.5 text-[0.78rem] font-medium text-white shadow-sm">{t('interactHint')}</span>
+          )}
           <span className="rounded-full bg-ink/75 px-3.5 py-1.5 text-[0.78rem] font-medium text-white backdrop-blur">{t('dragHint')}</span>
         </div>
       )}

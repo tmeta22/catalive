@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clampZoom, zoomDistance } from '../data/catalogue';
 import type { Config, Product } from '../data/types';
 import { useApp } from '../lib/app';
+import { Interaction, partLabelKey } from '../three/interactive';
 import { Studio, type ViewName } from '../three/studio';
 
 export interface BookModelHandle {
@@ -17,6 +18,8 @@ export interface BookModelHandle {
   fit: () => void;
   /** A PNG of the page as it looks right now, for the page turn. */
   capture: () => string | null;
+  /** Put all opened doors, drawers and cushions back. */
+  resetParts: () => void;
 }
 
 interface Tween {
@@ -39,7 +42,7 @@ const BookModel = forwardRef<
   BookModelHandle,
   { product: Product; cfg: Config; guides: boolean; autoRotate: boolean; onZoom?: (pct: number) => void }
 >(function BookModel({ product, cfg, guides, autoRotate, onZoom }, ref) {
-  const { len } = useApp();
+  const { len, t, toast } = useApp();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const studioRef = useRef<Studio | null>(null);
@@ -50,6 +53,7 @@ const BookModel = forwardRef<
   const zoomRef = useRef(100);
   const guidesRef = useRef(guides);
   const autoRef = useRef(autoRotate);
+  const interactionRef = useRef<Interaction | null>(null);
   const labelRefs = { w: useRef<HTMLSpanElement>(null), d: useRef<HTMLSpanElement>(null), h: useRef<HTMLSpanElement>(null) };
 
   cfgRef.current = cfg;
@@ -120,6 +124,13 @@ const BookModel = forwardRef<
     resize();
 
     studio.setProduct(product, cfgRef.current);
+    const interaction = new Interaction(studio.camera);
+    interaction.refresh(studio.piece);
+    interactionRef.current = interaction;
+    const unbind = interaction.bind(canvas, (part) => {
+      interaction.toggle(part);
+      toast(`${t(partLabelKey(part.spec.kind))} · ${part.target ? t('interactOpened') : t('interactClosed')}`);
+    });
     const first = studio.poseFor('three');
     studio.camera.position.copy(first.position);
     controls.target.copy(first.target);
@@ -136,6 +147,7 @@ const BookModel = forwardRef<
       el.style.transform = `translate(${((proj.x + 1) / 2) * r.width}px, ${((1 - proj.y) / 2) * r.height}px) translate(-50%, -50%)`;
     };
     let raf = 0;
+    let lastFrame = performance.now();
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       let needs = false;
@@ -143,6 +155,7 @@ const BookModel = forwardRef<
       if (dirty.current) {
         dirty.current = false;
         studio.setProduct(product, cfgRef.current);
+        interaction.refresh(studio.piece);
         if (!tween.current) {
           dir.copy(studio.camera.position).sub(controls.target).normalize();
           const need = studio.fitDistance(dir);
@@ -165,6 +178,10 @@ const BookModel = forwardRef<
         if (k >= 1) tween.current = null;
         needs = true;
       }
+
+      const dt = Math.min(0.1, (now - lastFrame) / 1000);
+      lastFrame = now;
+      if (interaction.update(dt)) needs = true;
 
       const moved = controls.update();
       if (moved || needs) {
@@ -189,10 +206,12 @@ const BookModel = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      unbind();
       controls.dispose();
       studio.dispose();
       studioRef.current = null;
       controlsRef.current = null;
+      interactionRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -240,6 +259,9 @@ const BookModel = forwardRef<
         } catch {
           return null;
         }
+      },
+      resetParts() {
+        interactionRef.current?.reset();
       },
       fit() {
         const s = studioRef.current;

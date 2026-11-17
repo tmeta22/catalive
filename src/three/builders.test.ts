@@ -14,7 +14,12 @@ function measure(p: Product, cfg: Config) {
   const box = new THREE.Box3().setFromObject(g);
   const size = new THREE.Vector3();
   box.getSize(size);
-  const meshes = g.children.length;
+  // Count real meshes, not top-level groups: movable parts are grouped under
+  // pivots so they can hinge together.
+  let meshes = 0;
+  g.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) meshes++;
+  });
   disposeGroup(g);
   return { w: size.x * 1000, d: size.z * 1000, h: size.y * 1000, floor: box.min.y * 1000, meshes };
 }

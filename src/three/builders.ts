@@ -13,6 +13,7 @@ import {
   sofaSeats,
   tableTopMm,
 } from '../data/rules';
+import { tagInteractive } from './interactive';
 import {
   duvetGeometry,
   pillowGeometry,
@@ -151,6 +152,24 @@ class Ctx {
   slab(mat: THREE.Material, outline: THREE.Shape, thick: number, y: number, x = 0, z = 0, bevel = 0.004) {
     return this.mesh(slabGeometry(outline, thick, bevel), mat, [x, y, z]);
   }
+
+  /**
+   * Gather everything made by `make` under a pivot at `at`. Hinged doors and
+   * sliding drawers need to move as one piece around a fixed edge.
+   */
+  pivot(at: V3, make: () => void): THREE.Group {
+    const start = this.g.children.length;
+    make();
+    const group = new THREE.Group();
+    group.position.set(...at);
+    for (const child of this.g.children.slice(start)) {
+      this.g.remove(child);
+      child.position.sub(group.position);
+      group.add(child);
+    }
+    this.g.add(group);
+    return group;
+  }
 }
 
 // ── Seating ────────────────────────────────────────────────────────────────
@@ -192,12 +211,14 @@ function buildLounge(c: Ctx) {
   const innerW = W - 2 * (arms === 'upholstered' ? armW : 0.09);
   const deckTop = deckY + 0.035;
   const cushT = Math.max(0.1, seatH - deckTop);
-  c.box(m.surface, [innerW, cushT, D - 0.14], [0, deckTop + cushT / 2, 0.06], 0.035);
+  const seat = c.box(m.surface, [innerW, cushT, D - 0.14], [0, deckTop + cushT / 2, 0.06], 0.035);
+  tagInteractive(seat, { kind: 'cushion', move: [0, 0.08, 0.02], spin: [-0.12, 0, 0] });
 
   // back cushion
   const backH = H - seatH - 0.02;
   const backZ = zb + 0.03 + Math.sin(lean) * (backH / 2);
-  c.box(m.surface, [innerW, backH, 0.12], [0, seatH + backH / 2 * Math.cos(lean), backZ], 0.04, [lean, 0, 0]);
+  const back = c.box(m.surface, [innerW, backH, 0.12], [0, seatH + backH / 2 * Math.cos(lean), backZ], 0.04, [lean, 0, 0]);
+  tagInteractive(back, { kind: 'cushion', move: [0, 0.05, 0.07], spin: [-0.2, 0, 0] });
 
   if (arms === 'wood') {
     const armTop = seatH + 0.2;
@@ -305,15 +326,17 @@ function buildSofa(c: Ctx) {
   const backH = H - (baseH + bodyH) - 0.02;
   for (let i = 0; i < n; i++) {
     const x = -innerW / 2 + cw * (i + 0.5);
-    c.box(m.surface, [cw - 0.012, cushT, D - backD - 0.03], [x, baseH + bodyH + cushT / 2, backD / 2 + 0.005], 0.04);
+    const seat = c.box(m.surface, [cw - 0.012, cushT, D - backD - 0.03], [x, baseH + bodyH + cushT / 2, backD / 2 + 0.005], 0.04);
+    tagInteractive(seat, { kind: 'cushion', move: [0, 0.07, 0.02], spin: [-0.1, 0, 0] });
     const lean = -0.12;
-    c.box(
+    const back = c.box(
       m.surface,
       [cw - 0.012, backH - 0.06, 0.17],
       [x, baseH + bodyH + (backH - 0.06) / 2 + cushT * 0.4, -D / 2 + backD / 2 + 0.03],
       0.05,
       [lean, 0, 0],
     );
+    tagInteractive(back, { kind: 'cushion', move: [0, 0.05, 0.06], spin: [-0.16, 0, 0] });
   }
   // solid back frame
   c.box(m.surface, [innerW + 0.02, backH * 0.55, 0.12], [0, baseH + bodyH + backH * 0.275, -D / 2 + 0.06], 0.04);
@@ -522,8 +545,11 @@ function buildTable(c: Ctx, variant: string) {
       const gh = (uh - 0.05) / rows;
       for (let i = 0; i < rows; i++) {
         const y = 0.06 + 0.025 + gh * (i + 0.5);
-        c.box(m.surface, [uw - 0.03, gh - 0.008, 0.018], [ux, y, D / 2 - 0.059], 0.004);
-        c.box(m.accent, [0.1, 0.012, 0.012], [ux, y, D / 2 - 0.035], 0.005);
+        const box = c.pivot([ux, y, D / 2 - 0.059], () => {
+          c.box(m.surface, [uw - 0.03, gh - 0.008, 0.018], [ux, y, D / 2 - 0.059], 0.004);
+          c.box(m.accent, [0.1, 0.012, 0.012], [ux, y, D / 2 - 0.035], 0.005);
+        });
+        tagInteractive(box, { kind: 'drawer', move: [0, 0, Math.min(0.24, D * 0.4)] });
       }
     }
     if (c.flag('cable')) c.cyl(m.accent, 0.03, 0.03, 0.002, [-W * 0.3, H + 0.0004, -D / 2 + 0.09], 24);
@@ -531,8 +557,12 @@ function buildTable(c: Ctx, variant: string) {
 
   if (variant === 'console' && c.flag('drawer')) {
     const dw = Math.min(0.6, W - 0.4);
-    c.box(m.surface, [dw, 0.1, 0.018], [0, underTop - 0.06, D / 2 - 0.06], 0.004);
-    c.box(m.accent, [0.09, 0.011, 0.012], [0, underTop - 0.06, D / 2 - 0.035], 0.005);
+    const dy = underTop - 0.06;
+    const box = c.pivot([0, dy, D / 2 - 0.06], () => {
+      c.box(m.surface, [dw, 0.1, 0.018], [0, dy, D / 2 - 0.06], 0.004);
+      c.box(m.accent, [0.09, 0.011, 0.012], [0, dy, D / 2 - 0.035], 0.005);
+    });
+    tagInteractive(box, { kind: 'drawer', move: [0, 0, Math.min(0.24, D * 0.4)] });
   }
 }
 
@@ -636,9 +666,15 @@ function buildCabinet(c: Ctx, variant: string) {
   const doorRow = (x0: number, width: number, n: number, y0: number, y1: number) => {
     const h = y1 - y0;
     bays(n, x0, width).forEach((b, i) => {
-      front(b.cx, y0 + h / 2, b.w, h);
-      // Pair doors so pulls meet in the middle of each pair.
-      handle(b.cx, variant === 'wardrobe' ? y0 + h * 0.5 : y1 - h * 0.35, 'v', b.w, h, n === 1 ? 1 : i % 2 === 0 ? 1 : -1);
+      // Pulls meet in the middle of each pair; the hinge sits on the far edge.
+      const edge = n === 1 ? 1 : i % 2 === 0 ? 1 : -1;
+      const cy = y0 + h / 2;
+      const hinge: V3 = [b.cx - edge * b.w / 2, cy, zFront];
+      const leaf = c.pivot(hinge, () => {
+        front(b.cx, cy, b.w, h);
+        handle(b.cx, variant === 'wardrobe' ? y0 + h * 0.5 : y1 - h * 0.35, 'v', b.w, h, edge);
+      });
+      tagInteractive(leaf, { kind: 'door', spin: [0, -edge * 1.75, 0] });
     });
   };
 
@@ -647,8 +683,11 @@ function buildCabinet(c: Ctx, variant: string) {
     bays(cols, x0, width).forEach((b) => {
       for (let r = 0; r < rows; r++) {
         const cy = y0 + rh * (r + 0.5) + gap * r;
-        front(b.cx, cy, b.w, rh);
-        handle(b.cx, cy, 'h', b.w, rh);
+        const box = c.pivot([b.cx, cy, zFront], () => {
+          front(b.cx, cy, b.w, rh);
+          handle(b.cx, cy, 'h', b.w, rh);
+        });
+        tagInteractive(box, { kind: 'drawer', move: [0, 0, Math.min(0.34, D * 0.45)] });
       }
     });
   };
@@ -736,9 +775,13 @@ function buildShelf(c: Ctx) {
     for (let i = 0; i < n; i++) {
       const cx = -innerW / 2 + bw * (i + 0.5) + 0.004 * i;
       const cy = y0 + t + baseH / 2;
-      c.box(m.frame, [bw, baseH - 0.006, 0.018], [cx, cy, D / 2 - 0.009], 0.004);
-      c.box(m.surface, [bw - 0.09, baseH - 0.096, 0.01], [cx, cy, D / 2 - 0.004], 0.002);
-      c.cyl(m.accent, 0.005, 0.005, 0.12, [cx + (i % 2 === 0 ? 1 : -1) * (bw / 2 - 0.03), cy, D / 2 + 0.012], 10);
+      const edge = i % 2 === 0 ? 1 : -1;
+      const leaf = c.pivot([cx - edge * bw / 2, cy, D / 2 - 0.009], () => {
+        c.box(m.frame, [bw, baseH - 0.006, 0.018], [cx, cy, D / 2 - 0.009], 0.004);
+        c.box(m.surface, [bw - 0.09, baseH - 0.096, 0.01], [cx, cy, D / 2 - 0.004], 0.002);
+        c.cyl(m.accent, 0.005, 0.005, 0.12, [cx + edge * (bw / 2 - 0.03), cy, D / 2 + 0.012], 10);
+      });
+      tagInteractive(leaf, { kind: 'door', spin: [0, -edge * 1.75, 0] });
     }
   }
 
@@ -817,10 +860,12 @@ function buildBed(c: Ctx) {
     const x = pillows === 1 ? 0 : (i === 0 ? -1 : 1) * (mW / 4);
     const p = c.mesh(pillowGeometry(pillowW, 0.13, 0.4), m.neutral, [x, mTop + 0.0, -D / 2 + hbT + 0.28], [-0.1, 0, 0]);
     p.position.y = mTop;
+    tagInteractive(p, { kind: 'pillow', move: [0, 0.16, 0.05], spin: [-0.4, 0, 0] });
   }
   const dl = mL * 0.62;
   const duvet = c.mesh(duvetGeometry(mW + 0.04, 0.07, dl), m.neutral, [0, mTop, mz + mL / 2 - dl / 2 + 0.01]);
   duvet.position.y = mTop - 0.005;
+  tagInteractive(duvet, { kind: 'duvet', move: [0, 0.1, 0.02], spin: [-0.12, 0, 0] });
   // Throw folded across the duvet, resting on top of it.
   const throwL = 0.42;
   c.box(m.accent, [mW + 0.04, 0.022, throwL], [0, mTop + 0.088, mz + mL / 2 - dl * 0.42], 0.01);
@@ -873,13 +918,16 @@ function buildDaybed(c: Ctx) {
   const br = clamp(H * 0.15, 0.06, 0.095);
   const bl = Math.min(D - 0.16, 0.8);
   const by = railTop + matT + br;
-  const makeBolster = (x: number, z: number, alongZ: boolean) =>
-    c.mesh(
+  const makeBolster = (x: number, z: number, alongZ: boolean) => {
+    const bolster = c.mesh(
       new THREE.CylinderGeometry(br, br, bl, 28, 1),
       m.surface,
       [x, by, z],
       alongZ ? [Math.PI / 2, 0, 0] : [0, 0, Math.PI / 2],
     );
+    tagInteractive(bolster, { kind: 'bolster', move: [0, 0.13, 0], spin: [-0.18, 0, 0] });
+    return bolster;
+  };
   if (bolsters >= 1) makeBolster(W / 2 - 0.15, 0.02, true);
   if (bolsters >= 2) makeBolster(-W / 2 + 0.15, 0.02, true);
   if (bolsters >= 3) makeBolster(0, -D / 2 + 0.18, false);

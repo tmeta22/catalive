@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   Smartphone,
   Sparkles,
+  Undo2,
   X,
 } from 'lucide-react';
 import ARViewer from '../components/ARViewer';
@@ -346,17 +347,28 @@ export default function BookPage({ query }: { query: URLSearchParams }) {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => setGuides((g) => !g)}
-                aria-pressed={guides}
-                className={`tap ml-auto flex items-center gap-1.5 rounded-full px-2.5 text-[0.75rem] font-semibold ${
-                  guides ? 'bg-indigo text-white' : 'text-ink-soft hover:bg-black/5'
-                }`}
-              >
-                <Ruler className="size-3.5" />
-                {t('measurements')}
-              </button>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => modelRef.current?.resetParts()}
+                  aria-label={t('interactReset')}
+                  title={t('interactReset')}
+                  className="tap grid size-9 place-items-center rounded-full text-ink-soft hover:bg-black/5"
+                >
+                  <Undo2 className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuides((g) => !g)}
+                  aria-pressed={guides}
+                  className={`tap flex items-center gap-1.5 rounded-full px-2.5 text-[0.75rem] font-semibold ${
+                    guides ? 'bg-indigo text-white' : 'text-ink-soft hover:bg-black/5'
+                  }`}
+                >
+                  <Ruler className="size-3.5" />
+                  {t('measurements')}
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setAutoRotate((a) => !a)}
