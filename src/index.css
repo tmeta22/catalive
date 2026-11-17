@@ -146,6 +146,84 @@
   }
 }
 
+/* ── The catalogue book ──────────────────────────────────────────────────── */
+
+/* Warm paper with a faint fibre tint. */
+.book-paper {
+  background:
+    radial-gradient(130% 100% at 50% 0%, #fffdf7 0%, #faf6ec 55%, #f3eee0 100%);
+}
+
+/* The shadow a book's gutter throws across the inner edge of each page. */
+.book-gutter-left {
+  box-shadow:
+    inset -22px 0 30px -22px rgb(74 58 34 / 0.42),
+    inset 0 -22px 30px -26px rgb(74 58 34 / 0.18);
+}
+.book-gutter-right {
+  box-shadow:
+    inset 22px 0 30px -22px rgb(74 58 34 / 0.42),
+    inset 0 -22px 30px -26px rgb(74 58 34 / 0.18);
+}
+
+/* The stack of leaves seen at the outer edge of the book. */
+.book-edge {
+  background: repeating-linear-gradient(90deg, #e9e2d2 0 1px, #f8f4e9 1px 3px);
+}
+
+/* A turning leaf. */
+.flip-sheet {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+.flip-shade {
+  background: linear-gradient(90deg, rgb(58 44 26 / 0) 0%, rgb(58 44 26 / 0.28) 72%, rgb(58 44 26 / 0.46) 100%);
+}
+
+@keyframes book-flip-forward {
+  0% {
+    transform: rotateY(0deg);
+  }
+  100% {
+    transform: rotateY(-180deg);
+  }
+}
+@keyframes book-flip-back {
+  0% {
+    transform: rotateY(0deg);
+  }
+  100% {
+    transform: rotateY(180deg);
+  }
+}
+@keyframes book-settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.anim-book-settle {
+  animation: book-settle 0.4s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-sheet,
+  .anim-book-settle {
+    animation: none !important;
+  }
+}
+
 /* Sheets slide up; this is a response to a tap, not decoration. */
 @keyframes sheet-in {
   from {

@@ -312,6 +312,29 @@ export class Studio {
     return url;
   }
 
+  /**
+   * A PNG of exactly what is on screen right now, camera included. The
+   * catalogue book uses it to print the page that is being turned.
+   */
+  grabCurrent(width = 960, height = 720): string {
+    const prev = new THREE.Vector2();
+    this.renderer.getSize(prev);
+    const prevRatio = this.renderer.getPixelRatio();
+    const prevAspect = this.camera.aspect;
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(width, height, false);
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.render();
+    const url = this.renderer.domElement.toDataURL('image/png');
+    this.renderer.setPixelRatio(prevRatio);
+    this.renderer.setSize(prev.x, prev.y, false);
+    this.camera.aspect = prevAspect;
+    this.camera.updateProjectionMatrix();
+    this.render();
+    return url;
+  }
+
   dispose(): void {
     if (this.furniture) disposeGroup(this.furniture);
     this.setGuides(false);

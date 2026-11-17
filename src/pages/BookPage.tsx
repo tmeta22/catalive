@@ -46,6 +46,24 @@ import { renderDrawingViews, type DrawingView, type ViewName } from '../three/st
 type Tab = 'details' | 'materials' | 'options' | 'stock' | 'orders';
 type Mode = '3d' | '2d';
 
+/** A leaf in mid-turn. */
+interface Flip {
+  dir: 1 | -1;
+  /** A picture of the page being turned away, when we have one. */
+  image: string | null;
+  /** The spread we are leaving. */
+  from: { product: Product; cfg: Config };
+  /** The spread we are turning to. */
+  to: Product;
+}
+
+const FLIP_MS = 720;
+
+/** Readers who asked for less motion get the page, not the theatre. */
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 const TABS: { id: Tab; icon: typeof Layers; label: StrKey }[] = [
   { id: 'details', icon: BookOpen, label: 'bookTabDetails' },
   { id: 'materials', icon: Layers, label: 'bookTabMaterials' },
@@ -62,7 +80,7 @@ const VIEWS: { id: ViewName; label: string }[] = [
 ];
 
 export default function BookPage({ query }: { query: URLSearchParams }) {
-  const { t, tt, money, locale, setLocale, bag, addToBag, toast } = useApp();
+  const { t, tt, locale, setLocale, bag, addToBag, toast } = useApp();
 
   const [index, setIndex] = useState(() => bookIndex(query.get('p')));
   const [configs, setConfigs] = useState<Record<string, Config>>({});
@@ -75,9 +93,11 @@ export default function BookPage({ query }: { query: URLSearchParams }) {
   const [exportViews, setExportViews] = useState<DrawingView[] | null>(null);
   const [arOpen, setArOpen] = useState(false);
   const [wish, setWish] = useState<WishItem[]>(() => readWishlist());
+  const [flip, setFlip] = useState<Flip | null>(null);
 
   const modelRef = useRef<BookModelHandle>(null);
   const exportRef = useRef<SVGSVGElement>(null);
+  const timers = useRef<number[]>([]);
 
   const product = PRODUCTS[index];
   // Keep a stable identity for the config, or every render would restart the
@@ -88,18 +108,44 @@ export default function BookPage({ query }: { query: URLSearchParams }) {
     [product],
   );
 
-  const price = useMemo(() => priceBreakdown(product, cfg), [product, cfg]);
   const layout = useMemo(() => drawingLayout(cfg), [cfg]);
   const drawingNo = useMemo(() => drawingNumber(product, cfg), [product, cfg]);
   const cat = CATEGORIES.find((c) => c.id === product.category)!;
 
-  // Page turns.
-  const turn = useCallback((delta: number) => {
-    setIndex((i) => turnPage(i, delta));
-    setMode('3d');
-    setZoom(100);
-    setTab('details');
-  }, []);
+  // Page turns: the leaf sweeps across the spine while the spread changes
+  // underneath it, the way a real book behaves.
+  const turn = useCallback(
+    (delta: number) => {
+      if (flip) return;
+      const next = turnPage(index, delta);
+      if (next === index) return;
+
+      const showPage = () => {
+        setIndex(next);
+        setMode('3d');
+        setZoom(100);
+        setTab('details');
+      };
+
+      if (prefersReducedMotion()) {
+        showPage();
+        return;
+      }
+
+      const image = delta > 0 ? modelRef.current?.capture() ?? null : null;
+      setFlip({ dir: delta > 0 ? 1 : -1, image, from: { product, cfg }, to: PRODUCTS[next] });
+      timers.current.forEach((id) => window.clearTimeout(id));
+      timers.current = [
+        // Swap the spread once the leaf is edge-on and hides the seam.
+        window.setTimeout(showPage, FLIP_MS * 0.45),
+        // Then take the leaf away.
+        window.setTimeout(() => setFlip(null), FLIP_MS + 60),
+      ];
+    },
+    [flip, index, product, cfg],
+  );
+
+  useEffect(() => () => timers.current.forEach((id) => window.clearTimeout(id)), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -177,7 +223,6 @@ export default function BookPage({ query }: { query: URLSearchParams }) {
   }, [product, cfg, t, toast]);
 
   const savedHere = wish.some((w) => w.productId === product.id);
-  const standard = isStandardSize(product, cfg);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-paper-deep">
@@ -241,77 +286,139 @@ export default function BookPage({ query }: { query: URLSearchParams }) {
       </header>
 
       {/* ── The spread ───────────────────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 sm:p-5 lg:grid-cols-2 lg:gap-5 lg:overflow-hidden lg:px-16 lg:py-5">
-        <section className="order-2 flex min-h-0 flex-col overflow-y-auto rounded-2xl bg-card p-5 shadow-sm lg:order-1">
-          <PageHeading product={product} price={price.total} money={money} standard={standard} />
-          <div className="mt-4 flex-1">{renderTab()}</div>
-        </section>
-
-        <section className="order-1 flex min-h-[46svh] flex-col overflow-hidden rounded-2xl bg-card shadow-sm lg:order-2 lg:min-h-0">
-          <div className="relative min-h-0 flex-1">
-            {mode === '3d' ? (
-              <BookModel
-                key={product.id}
-                ref={modelRef}
-                product={product}
-                cfg={cfg}
-                guides={guides}
-                autoRotate={autoRotate}
-                onZoom={(pct) => setZoom(clampZoom(pct))}
-              />
-            ) : (
-              <div className="size-full bg-white p-3">
-                {views ? (
-                  <DrawingSvg views={views} product={product} cfg={cfg} drawingNo={drawingNo} layout={layout} />
-                ) : (
-                  <div className="grid size-full place-items-center text-ink-soft">
-                    <div className="text-center">
-                      <div className="skeleton mx-auto mb-3 h-2 w-40 rounded-full" />
-                      {t('drawingLoading')}
-                    </div>
-                  </div>
-                )}
+      <div className="relative flex min-h-0 flex-1 items-stretch justify-center overflow-hidden px-3 py-3 sm:px-6 sm:py-5">
+        {/* The book itself: two leaves either side of the spine. */}
+        <div className="relative flex w-full max-w-6xl">
+          {/* Left leaf */}
+          <section className="book-paper book-gutter-left relative order-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-l-2xl border border-line/70 shadow-[0_18px_40px_-24px_rgba(60,48,30,0.45)] lg:order-1">
+            <div className="flex-1 px-5 py-5 sm:px-7">
+              <div className="anim-book-settle" key={product.id}>
+                <SpreadPage product={product} cfg={cfg} tab={tab} setCfg={setCfg} />
               </div>
-            )}
+            </div>
+            <p className="mt-4 shrink-0 pb-4 text-center text-[0.7rem] font-semibold tracking-wide text-ink-faint">{index * 2 + 2}</p>
+          </section>
+
+          {/* The spine — only a bound book has one; phones get a single column. */}
+          <div className="order-1 hidden w-[10px] shrink-0 self-stretch lg:order-2 lg:block">
+            <div className="size-full bg-[linear-gradient(90deg,#efe9da_0%,#b9ac91_38%,#8d8168_50%,#b9ac91_62%,#efe9da_100%)] shadow-[inset_0_0_10px_rgba(60,48,30,0.35)]" />
           </div>
 
-          <div className="flex items-center gap-2 border-t border-line px-3 py-2">
-            <div className="flex gap-1">
-              {VIEWS.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => modelRef.current?.setView(v.id)}
-                  className="tap rounded-full px-2.5 text-[0.75rem] font-semibold text-ink-soft hover:bg-paper-deep"
-                >
-                  {v.label}
-                </button>
-              ))}
+          {/* Right leaf */}
+          <section className="book-paper book-gutter-right relative order-1 flex min-h-[48svh] min-w-0 flex-1 flex-col overflow-hidden rounded-r-2xl border border-line/70 shadow-[0_18px_40px_-24px_rgba(60,48,30,0.45)] lg:order-3 lg:min-h-0">
+            <div className="relative min-h-0 flex-1">
+              {mode === '3d' ? (
+                <BookModel
+                  key={product.id}
+                  ref={modelRef}
+                  product={product}
+                  cfg={cfg}
+                  guides={guides}
+                  autoRotate={autoRotate}
+                  onZoom={(pct) => setZoom(clampZoom(pct))}
+                />
+              ) : (
+                <div className="size-full bg-white p-3">
+                  {views ? (
+                    <DrawingSvg views={views} product={product} cfg={cfg} drawingNo={drawingNo} layout={layout} />
+                  ) : (
+                    <div className="grid size-full place-items-center text-ink-soft">
+                      <div className="text-center">
+                        <div className="skeleton mx-auto mb-3 h-2 w-40 rounded-full" />
+                        {t('drawingLoading')}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => setGuides((g) => !g)}
-              aria-pressed={guides}
-              className={`tap ml-auto flex items-center gap-1.5 rounded-full px-2.5 text-[0.75rem] font-semibold ${
-                guides ? 'bg-indigo text-white' : 'text-ink-soft hover:bg-paper-deep'
-              }`}
+
+            <div className="flex items-center gap-2 border-t border-line/70 bg-white/40 px-3 py-2">
+              <div className="flex gap-1">
+                {VIEWS.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => modelRef.current?.setView(v.id)}
+                    className="tap rounded-full px-2.5 text-[0.75rem] font-semibold text-ink-soft hover:bg-black/5"
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setGuides((g) => !g)}
+                aria-pressed={guides}
+                className={`tap ml-auto flex items-center gap-1.5 rounded-full px-2.5 text-[0.75rem] font-semibold ${
+                  guides ? 'bg-indigo text-white' : 'text-ink-soft hover:bg-black/5'
+                }`}
+              >
+                <Ruler className="size-3.5" />
+                {t('measurements')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAutoRotate((a) => !a)}
+                aria-pressed={autoRotate}
+                className={`tap flex items-center gap-1.5 rounded-full px-2.5 text-[0.75rem] font-semibold ${
+                  autoRotate ? 'bg-ink text-white' : 'text-ink-soft hover:bg-black/5'
+                }`}
+              >
+                <RotateCcw className="size-3.5" />
+                {t('bookSpin')}
+              </button>
+            </div>
+            <p className="hidden shrink-0 bg-white/40 pb-1 text-center text-[0.7rem] font-semibold tracking-wide text-ink-faint lg:block">
+              {index * 2 + 3}
+            </p>
+          </section>
+
+          {/* ── The leaf in mid-turn ──────────────────────────────────────── */}
+          {flip && (
+            <div
+              className="pointer-events-none absolute inset-y-0 hidden lg:block"
+              style={{
+                // The leaf sits exactly on the page it belongs to.
+                ...(flip.dir === 1
+                  ? { left: 'calc(50% + 5px)', width: 'calc(50% - 5px)' }
+                  : { right: 'calc(50% + 5px)', width: 'calc(50% - 5px)' }),
+                perspective: '2200px',
+                transformStyle: 'preserve-3d',
+              }}
             >
-              <Ruler className="size-3.5" />
-              {t('measurements')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAutoRotate((a) => !a)}
-              aria-pressed={autoRotate}
-              className={`tap flex items-center gap-1.5 rounded-full px-2.5 text-[0.75rem] font-semibold ${
-                autoRotate ? 'bg-ink text-white' : 'text-ink-soft hover:bg-paper-deep'
-              }`}
-            >
-              <RotateCcw className="size-3.5" />
-              {t('bookSpin')}
-            </button>
-          </div>
-        </section>
+              <div
+                className="flip-sheet size-full"
+                style={{
+                  transformOrigin: flip.dir === 1 ? 'left center' : 'right center',
+                  animation: `${flip.dir === 1 ? 'book-flip-forward' : 'book-flip-back'} ${FLIP_MS}ms cubic-bezier(0.45, 0.05, 0.25, 1) forwards`,
+                }}
+              >
+                {/* The face we can see first. */}
+                <div className="flip-face book-paper book-gutter-right absolute inset-0 overflow-hidden rounded-r-2xl shadow-[0_18px_40px_-24px_rgba(60,48,30,0.5)]">
+                  {flip.dir === 1 ? (
+                    flip.image ? (
+                      <img src={flip.image} alt="" className="size-full object-contain p-6" />
+                    ) : (
+                      <div className="size-full" />
+                    )
+                  ) : (
+                    <div className="size-full overflow-y-auto px-7 py-5">
+                      <SpreadPage product={flip.from.product} cfg={flip.from.cfg} tab={tab} setCfg={() => {}} />
+                    </div>
+                  )}
+                  <div className="flip-shade pointer-events-none absolute inset-0" />
+                </div>
+
+                {/* The face we see once the leaf is past the spine. */}
+                <div className="flip-face flip-back book-paper absolute inset-0 overflow-hidden rounded-l-2xl shadow-[0_18px_40px_-24px_rgba(60,48,30,0.5)]">
+                  <SummaryPage product={flip.to} />
+                  <div className="flip-shade pointer-events-none absolute inset-0 rotate-180" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Control bar ──────────────────────────────────────────────────── */}
@@ -424,45 +531,96 @@ export default function BookPage({ query }: { query: URLSearchParams }) {
       <ARViewer open={arOpen} onClose={() => setArOpen(false)} product={product} cfg={cfg} onConfigChange={setCfg} />
     </div>
   );
+}
 
-  // ── Tab panels ───────────────────────────────────────────────────────────
+// ── The written page ───────────────────────────────────────────────────────
 
-  function renderTab() {
-    switch (tab) {
-      case 'materials':
-        return <MaterialsTab product={product} cfg={cfg} onChange={setCfg} />;
-      case 'options':
-        return <OptionsTab product={product} cfg={cfg} onChange={setCfg} />;
-      case 'stock':
-        return <StockTab product={product} cfg={cfg} />;
-      case 'orders':
-        return <OrdersTab wish={wish} />;
-      default:
-        return <DetailsTab product={product} cfg={cfg} onChange={setCfg} />;
-    }
+function SpreadPage({
+  product,
+  cfg,
+  tab,
+  setCfg,
+}: {
+  product: Product;
+  cfg: Config;
+  tab: Tab;
+  setCfg: (c: Config) => void;
+}) {
+  return (
+    <>
+      <PageHeading product={product} cfg={cfg} />
+      <div className="mt-4">
+        <TabPanel tab={tab} product={product} cfg={cfg} onChange={setCfg} />
+      </div>
+    </>
+  );
+}
+
+function TabPanel({
+  tab,
+  product,
+  cfg,
+  onChange,
+}: {
+  tab: Tab;
+  product: Product;
+  cfg: Config;
+  onChange: (c: Config) => void;
+}) {
+  switch (tab) {
+    case 'materials':
+      return <MaterialsTab product={product} cfg={cfg} onChange={onChange} />;
+    case 'options':
+      return <OptionsTab product={product} cfg={cfg} onChange={onChange} />;
+    case 'stock':
+      return <StockTab product={product} cfg={cfg} />;
+    case 'orders':
+      return <OrdersTab />;
+    default:
+      return <DetailsTab product={product} cfg={cfg} onChange={onChange} />;
   }
+}
+
+/** The page that shows while a leaf is turning: the piece, briefly. */
+function SummaryPage({ product }: { product: Product }) {
+  const { t, tt, money, len } = useApp();
+  const price = priceBreakdown(product, defaultConfig(product));
+  return (
+    <div className="flex size-full flex-col justify-center gap-3 px-8 py-6">
+      <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-indigo">{tt(CATEGORIES.find((c) => c.id === product.category)!.label)}</p>
+      <h2 className="text-[1.6rem] font-bold leading-tight">{tt(product.name)}</h2>
+      <p className="text-[0.9rem] text-ink-soft">{tt(product.tagline)}</p>
+      <p className="text-[1.15rem] font-bold">{money(price.total)}</p>
+      <dl className="mt-1 space-y-1 text-[0.82rem] text-ink-soft">
+        <div className="flex justify-between gap-3">
+          <dt>{t('width')}</dt>
+          <dd className="font-semibold text-ink">{len(product.dims.w.def)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt>{t('depth')}</dt>
+          <dd className="font-semibold text-ink">{len(product.dims.d.def)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt>{t('height')}</dt>
+          <dd className="font-semibold text-ink">{len(product.dims.h.def)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
 }
 
 // ── Page heading ────────────────────────────────────────────────────────────
 
-function PageHeading({
-  product,
-  price,
-  money,
-  standard,
-}: {
-  product: Product;
-  price: number;
-  money: (usd: number, signed?: boolean) => string;
-  standard: boolean;
-}) {
-  const { t, tt } = useApp();
+function PageHeading({ product, cfg }: { product: Product; cfg: Config }) {
+  const { t, tt, money } = useApp();
+  const price = priceBreakdown(product, cfg);
+  const standard = isStandardSize(product, cfg);
   return (
     <div className="border-b border-line pb-4">
       <p className="text-[0.78rem] font-semibold uppercase tracking-wide text-indigo">{tt(product.tagline)}</p>
       <h1 className="mt-1 text-[1.5rem] font-bold leading-tight">{tt(product.name)}</h1>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-[1.1rem] font-bold">{money(price)}</span>
+        <span className="text-[1.1rem] font-bold">{money(price.total)}</span>
         {standard && (
           <span className="rounded-full bg-moss-wash px-2.5 py-0.5 text-[0.72rem] font-bold text-moss">{t('inStock')}</span>
         )}
@@ -733,8 +891,9 @@ function StockTab({ product, cfg }: { product: Product; cfg: Config }) {
 
 // ── Orders (bag + saved designs) ───────────────────────────────────────────
 
-function OrdersTab({ wish }: { wish: WishItem[] }) {
+function OrdersTab() {
   const { t, tt, money, bag } = useApp();
+  const [wish] = useState<WishItem[]>(() => readWishlist());
 
   return (
     <div className="space-y-5">
