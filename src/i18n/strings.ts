@@ -1,4 +1,4 @@
-import type { LocalizedText } from './translations';
+﻿import type { LocalizedText } from './translations';
 
 const s = (km: string, en: string): LocalizedText => ({ km, en });
 
@@ -219,6 +219,30 @@ export const S = {
   zonePP: s('ភ្នំពេញ', 'Phnom Penh'),
   zoneProv: s('តាមបណ្តាខេត្ត', 'Other provinces'),
   yes: s('បាទ', 'Yes'),
+  bookContents: s('មាតិកា', 'Contents'),
+  bookIntroHint: s('ប៉ះទំព័រ ឬប្រើព្រួញ ដើម្បីរំកិលទំព័រ។', 'Tap a page or use the arrows to turn it.'),
+  bookPopHint: s('អូសដើម្បីបង្វិលសៀវភៅ ឬគ្រឿងសង្ហារិម', 'Drag to look around the book and the piece'),
+  bookSizeRange: s('ជួរទំហំ', 'Size range'),
+  bookCad: s('ស៊ុមវាស់', 'CAD cage'),
+  bookCover: s('សេចក្តីផ្តើម', 'Welcome'),
+  bookCustomise: s('កែតាមចិត្ត និងមើលក្នុងបន្ទប់', 'Customise & see in your room'),
+  bookCustomiseShort: s('កែតាមចិត្ត · AR', 'Customise · AR'),
+  bookExitFullscreen: s('ចេញពីពេញអេក្រង់', 'Exit fullscreen'),
+  bookFlat: s('2D', '2D'),
+  bookFull: s('3D', '3D'),
+  bookFullscreen: s('ពេញអេក្រង់', 'Fullscreen'),
+  bookHide: s('លាក់ផ្ទាំងបញ្ជា', 'Hide controls'),
+  bookLight: s('ពន្លឺ', 'Light'),
+  bookPageOf: s('{n} / {total}', '{n} / {total}'),
+  bookPopUp: s('លេចចេញ', 'Pop-up'),
+  bookShow: s('បង្ហាញផ្ទាំងបញ្ជា', 'Show controls'),
+  bookView: s('មុំមើល', 'View'),
+  lightEvening: s('ល្ងាច', 'Evening'),
+  lightMorning: s('ព្រឹក', 'Morning'),
+  lightNoon: s('ថ្ងៃត្រង់', 'Noon'),
+  viewClose: s('ជិត', 'Close-up'),
+  viewLow: s('ទាប', 'Low'),
+  viewThreeQuarter: s('3/4', '3/4'),
 } as const satisfies Record<string, LocalizedText>;
 
 export type StrKey = keyof typeof S;

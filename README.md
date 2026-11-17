@@ -27,9 +27,9 @@ No payment is taken in the app. The checkout says so, and asks the customer to w
 - **19 pieces** in four categories (seating, tables, storage, bedroom), every one fully parametric.
 - **Full custom specs**: per-product width, depth and height ranges with sliders and number fields (cm / mm / in), standard-size shortcuts, up to three material slots, and 2 to 4 detail options per piece. Round tops tie depth to width ("Diameter"), and incompatible combinations repair themselves.
 - **Live 3D** (three.js): orbit and pinch, front / side / top views, measurement labels, soft shadows. Light timbers, leather, bouclé, silk, cane, stone and lacquer.
-- **Try the pieces**: tap a cabinet door to swing it open, pull out a drawer, lift a pillow or a sofa cushion, or roll a bolster. Movable parts are tagged while the model is built; a reset button puts everything back. Works in the product viewer and in the catalogue book.
+- **Try the pieces**: tap a cabinet door to swing it open, pull out a drawer, lift a pillow or a sofa cushion, or roll a bolster. Movable parts are tagged while the model is built; a reset button puts everything back. Works in the product viewer.
 - **AR in your room** (WebXR): place the piece on the real floor, walk around it, change the size or the finish while it stands there. Needs an Android device with Chrome; other devices get a clear explanation and a link to open on a phone.
-- **Catalogue book** (`#/book`): the whole collection as a book. A live 3D model on the right-hand page, the drawing sheet in 2D mode, a control bar with views, zoom, CAD export, save and bag, and tabs for materials, options, stock and orders.
+- **Catalogue book** (`#/book`, book icon in the header): a 3D open book on a table. Tap a page, use the arrows or the contents grid to turn pages with a curling leaf. Each product spread has a left page (title, hidden-line elevations, size range, price, lead time, standard materials) and a pop-up piece rising from the right page. Controls: flatten 2D → 3D slider, CAD cage with live measurements, four camera views, morning / noon / evening light, fullscreen, and a "Customise → AR" jump into the configurator. Deep links like `#/book?p=sofa` work.
 - **Honest pricing**: the default build always costs the base price; every change shows what it adds or saves, with an itemised breakdown. Custom sizes add a week to the lead time, and only standard builds ship from stock.
 - **Technical drawing**: front, side and plan elevations with dimension lines, title block and drawing number. Download as SVG or print on A3.
 - **Spec sheet** (printable), **share link** (the whole configuration is in the URL), **bag** with delivery zones and the `SOLIS10` code, and an order summary ready for Telegram.
@@ -49,6 +49,11 @@ src/
     builders.ts     one parametric builder per furniture family
     studio.ts       renderer, lights, camera fitting, stills, technical drawings
     materials.ts    material -> PBR texture mapping
+    book.ts         the 3D catalogue book (pages, page turn, pop-up, cage, light, views)
+    pageArt.ts      canvas artwork for the book's pages
+    guides.ts       CAD cage and measurement guides for the book
+    interactive.ts  movable doors, drawers, cushions and their picking
+    ar.ts           WebXR session, hit testing and placement
   components/, pages/, lib/, i18n/
 ```
 
