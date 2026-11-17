@@ -9,7 +9,7 @@ import { buildFurniture, clearGeometryCache, disposeGroup, type Mats } from '../
 
 function mats(): Mats {
   const m = () => new THREE.MeshBasicMaterial();
-  return { frame: m(), surface: m(), accent: m(), neutral: m() };
+  return { frame: m(), surface: m(), accent: m(), neutral: m(), inside: m() };
 }
 
 function piece(id: string) {

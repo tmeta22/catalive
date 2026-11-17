@@ -3,7 +3,7 @@ import { PRODUCTS } from '../src/data/products';
 import { defaultConfig, normalizeConfig } from '../src/data/config';
 import { buildFurniture, disposeGroup } from '../src/three/builders';
 const mk = () => new THREE.MeshStandardMaterial();
-const mats = { frame: mk(), surface: mk(), accent: mk(), neutral: mk() };
+const mats = { frame: mk(), surface: mk(), accent: mk(), neutral: mk(), inside: mk() };
 const rows: { id: string; ms: number; meshes: number }[] = [];
 for (const p of PRODUCTS) {
   const def = defaultConfig(p);

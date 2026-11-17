@@ -398,7 +398,7 @@ export function renderDrawingViews(p: Product, cfg: Config, maxPx = 1500): Drawi
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
   });
-  const group = buildFurniture(p, cfg, { frame: fill, surface: fill, accent: fill, neutral: fill });
+  const group = buildFurniture(p, cfg, { frame: fill, surface: fill, accent: fill, neutral: fill, inside: fill });
   const lineMats: LineMaterial[] = [];
   const edgeGeos: LineSegmentsGeometry[] = [];
   const meshes: THREE.Mesh[] = [];

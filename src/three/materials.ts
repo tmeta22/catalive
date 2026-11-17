@@ -160,8 +160,13 @@ export class MaterialSet {
     const surface = makeMaterial();
     const accent = makeMaterial();
     const neutral = makeMaterial();
+    // A dark, matte lining for the inside of cabinets and shelves.
+    const inside = makeMaterial();
+    inside.color.set('#3a2c21');
+    inside.roughness = 0.92;
+
     this.slots = { frame, surface, accent };
-    this.mats = { frame, surface, accent, neutral };
+    this.mats = { frame, surface, accent, neutral, inside };
     applyLibraryMaterial(neutral, {
       id: 'neutral',
       kind: 'fabric',

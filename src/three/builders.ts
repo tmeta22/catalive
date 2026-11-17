@@ -33,6 +33,8 @@ export interface Mats {
   accent: THREE.Material;
   /** Plain off-white linen for mattresses and pillows. */
   neutral: THREE.Material;
+  /** Dark timber for the inside of carcases, so a cavity reads as a cavity. */
+  inside: THREE.Material;
 }
 
 type V3 = [number, number, number];
@@ -600,7 +602,7 @@ function buildCabinet(c: Ctx, variant: string) {
   const shellH = bodyTop - legH;
   const sideT = 0.018;
   for (const sx of [-1, 1]) c.box(m.frame, [sideT, shellH, Dc - 0.012], [sx * (W / 2 - sideT / 2), legH + shellH / 2, zc - 0.006], 0.002);
-  c.box(m.frame, [W - 0.01, shellH, 0.012], [0, legH + shellH / 2, -D / 2 + 0.006], 0.002);
+  c.box(m.inside, [W - 0.01, shellH, 0.012], [0, legH + shellH / 2, -D / 2 + 0.006], 0.002);
   c.box(m.frame, [W - 0.01, 0.02, Dc - 0.016], [0, legH + 0.01, zc - 0.006], 0.002);
 
   const fx0 = -W / 2 + sideT;
@@ -622,12 +624,12 @@ function buildCabinet(c: Ctx, variant: string) {
     const z = zc - 0.02;
     for (let i = 1; i < bays; i++) {
       const x = x0 + (w * i) / bays;
-      c.box(m.frame, [0.016, h, depth], [x, (y0 + y1) / 2, z], 0.002);
+      c.box(m.inside, [0.016, h, depth], [x, (y0 + y1) / 2, z], 0.002);
     }
     const shelves = h > 0.75 ? 3 : h > 0.4 ? 2 : 1;
     for (let i = 1; i <= shelves; i++) {
       const y = y0 + (h * i) / (shelves + 1);
-      c.box(m.frame, [w - 0.014, 0.018, depth], [(x0 + x1) / 2, y, z], 0.002);
+      c.box(m.inside, [w - 0.014, 0.018, depth], [(x0 + x1) / 2, y, z], 0.002);
     }
   };
 
@@ -781,7 +783,7 @@ function buildShelf(c: Ctx) {
   for (const sx of [-1, 1]) c.box(m.frame, [t, bodyH, D], [sx * (W / 2 - t / 2), y0 + bodyH / 2, 0], 0.003);
   c.box(m.frame, [W, t, D], [0, H - t / 2, 0], 0.003);
   c.box(m.frame, [W - 2 * t, t, D], [0, y0 + t / 2, 0], 0.002);
-  if (c.flag('back')) c.box(m.frame, [W - 2 * t, bodyH - 2 * t, 0.01], [0, y0 + bodyH / 2, -D / 2 + 0.005], 0.001);
+  if (c.flag('back')) c.box(m.inside, [W - 2 * t, bodyH - 2 * t, 0.01], [0, y0 + bodyH / 2, -D / 2 + 0.005], 0.001);
 
   const shelfBottom = y0 + t + baseH;
   const shelfTop = H - t;
@@ -791,6 +793,9 @@ function buildShelf(c: Ctx) {
 
   if (hasBase) {
     c.box(m.frame, [innerW, t, D - 0.01], [0, shelfBottom - t / 2, 0.0], 0.002);
+    // A dark back behind the base doors so opening them reveals a bay, not
+    // a view straight through the bookcase.
+    c.box(m.inside, [innerW, baseH, 0.012], [0, y0 + t + baseH / 2, -D / 2 + 0.008], 0.002);
     const n = Math.max(1, cabinetBays(c.cfg.w, 520));
     const bw = (innerW - 0.004 * (n - 1)) / n;
     for (let i = 0; i < n; i++) {

@@ -7,7 +7,7 @@ import type { Config, Product } from '../data/types';
 import { buildFurniture, disposeGroup } from './builders';
 
 const mk = () => new THREE.MeshStandardMaterial();
-const mats = { frame: mk(), surface: mk(), accent: mk(), neutral: mk() };
+const mats = { frame: mk(), surface: mk(), accent: mk(), neutral: mk(), inside: mk() };
 
 function measure(p: Product, cfg: Config) {
   const g = buildFurniture(p, cfg, mats);
