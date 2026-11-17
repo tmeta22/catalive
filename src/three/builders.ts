@@ -545,13 +545,22 @@ function buildTable(c: Ctx, variant: string) {
       c.box(m.frame, [uw, uh, D - 0.1], [ux, 0.06 + uh / 2, -0.02], 0.006);
       const rows = 3;
       const gh = (uh - 0.05) / rows;
+      const pull = Math.min(0.24, D * 0.4);
+      const depth = Math.max(0.1, pull + 0.03);
       for (let i = 0; i < rows; i++) {
         const y = 0.06 + 0.025 + gh * (i + 0.5);
-        const box = c.pivot([ux, y, D / 2 - 0.059], () => {
-          c.box(m.surface, [uw - 0.03, gh - 0.008, 0.018], [ux, y, D / 2 - 0.059], 0.004);
+        const frontZ = D / 2 - 0.059;
+        const backZ = frontZ - depth;
+        const box = c.pivot([ux, y, frontZ], () => {
+          c.box(m.surface, [uw - 0.03, gh - 0.008, 0.018], [ux, y, frontZ], 0.004);
           c.box(m.accent, [0.1, 0.012, 0.012], [ux, y, D / 2 - 0.035], 0.005);
+          c.box(m.inside, [uw - 0.06, 0.01, depth], [ux, y - gh / 2 + 0.01, (frontZ + backZ) / 2], 0.002);
+          for (const s of [-1, 1]) {
+            c.box(m.inside, [0.01, gh - 0.03, depth], [ux + s * (uw / 2 - 0.024), y, (frontZ + backZ) / 2], 0.002);
+          }
+          c.box(m.inside, [uw - 0.06, gh - 0.03, 0.01], [ux, y, backZ], 0.002);
         });
-        tagInteractive(box, { kind: 'drawer', move: [0, 0, Math.min(0.24, D * 0.4)] });
+        tagInteractive(box, { kind: 'drawer', move: [0, 0, pull] });
       }
     }
     if (c.flag('cable')) c.cyl(m.accent, 0.03, 0.03, 0.002, [-W * 0.3, H + 0.0004, -D / 2 + 0.09], 24);
@@ -560,11 +569,20 @@ function buildTable(c: Ctx, variant: string) {
   if (variant === 'console' && c.flag('drawer')) {
     const dw = Math.min(0.6, W - 0.4);
     const dy = underTop - 0.06;
-    const box = c.pivot([0, dy, D / 2 - 0.06], () => {
-      c.box(m.surface, [dw, 0.1, 0.018], [0, dy, D / 2 - 0.06], 0.004);
+    const pull = Math.min(0.24, D * 0.4);
+    const depth = Math.max(0.1, pull + 0.03);
+    const frontZ = D / 2 - 0.06;
+    const backZ = frontZ - depth;
+    const box = c.pivot([0, dy, frontZ], () => {
+      c.box(m.surface, [dw, 0.1, 0.018], [0, dy, frontZ], 0.004);
       c.box(m.accent, [0.09, 0.011, 0.012], [0, dy, D / 2 - 0.035], 0.005);
+      c.box(m.inside, [dw - 0.05, 0.01, depth], [0, dy - 0.045, (frontZ + backZ) / 2], 0.002);
+      for (const s of [-1, 1]) {
+        c.box(m.inside, [0.01, 0.08, depth], [s * (dw / 2 - 0.02), dy, (frontZ + backZ) / 2], 0.002);
+      }
+      c.box(m.inside, [dw - 0.05, 0.08, 0.01], [0, dy, backZ], 0.002);
     });
-    tagInteractive(box, { kind: 'drawer', move: [0, 0, Math.min(0.24, D * 0.4)] });
+    tagInteractive(box, { kind: 'drawer', move: [0, 0, pull] });
   }
 }
 
@@ -616,7 +634,7 @@ function buildCabinet(c: Ctx, variant: string) {
    * the bays only need dividers and shelves. A solid block here made an open
    * door look like it revealed a slab of timber instead of a cabinet.
    */
-  const interior = (x0: number, x1: number, y0: number, y1: number, bays = 1) => {
+  const interior = (x0: number, x1: number, y0: number, y1: number, bays = 1, withShelves = true) => {
     const w = x1 - x0;
     const h = y1 - y0;
     if (w < 0.02 || h < 0.02) return;
@@ -626,6 +644,8 @@ function buildCabinet(c: Ctx, variant: string) {
       const x = x0 + (w * i) / bays;
       c.box(m.inside, [0.016, h, depth], [x, (y0 + y1) / 2, z], 0.002);
     }
+    // A stack of drawers fills the height itself: shelves would poke through.
+    if (!withShelves) return;
     const shelves = h > 0.75 ? 3 : h > 0.4 ? 2 : 1;
     for (let i = 1; i <= shelves; i++) {
       const y = y0 + (h * i) / (shelves + 1);
@@ -698,22 +718,32 @@ function buildCabinet(c: Ctx, variant: string) {
 
   const drawerStack = (x0: number, width: number, rows: number, cols: number, y0: number, y1: number) => {
     const rh = (y1 - y0 - gap * (rows - 1)) / rows;
+    const pull = Math.min(0.34, D * 0.45);
+    const depth = Math.max(0.12, Math.min(pull + 0.04, Dc - 0.06));
     bays(cols, x0, width).forEach((b) => {
       for (let r = 0; r < rows; r++) {
         const cy = y0 + rh * (r + 0.5) + gap * r;
+        const zBack = zFront - depth;
         const box = c.pivot([b.cx, cy, zFront], () => {
           front(b.cx, cy, b.w, rh);
           handle(b.cx, cy, 'h', b.w, rh);
+          // A real tray: floor, two sides and a back. Without it the front
+          // slides out as a lone floating panel.
+          c.box(m.inside, [b.w - 0.024, 0.012, depth], [b.cx, cy - rh / 2 + 0.014, (zFront + zBack) / 2], 0.002);
+          for (const s of [-1, 1]) {
+            c.box(m.inside, [0.012, rh - 0.03, depth], [b.cx + s * (b.w / 2 - 0.018), cy, (zFront + zBack) / 2], 0.002);
+          }
+          c.box(m.inside, [b.w - 0.024, rh - 0.03, 0.012], [b.cx, cy, zBack], 0.002);
         });
-        tagInteractive(box, { kind: 'drawer', move: [0, 0, Math.min(0.34, D * 0.45)] });
+        tagInteractive(box, { kind: 'drawer', move: [0, 0, pull] });
       }
     });
   };
 
   if (variant === 'credenza') {
     const n = Math.max(2, cabinetBays(c.cfg.w, 500));
-    interior(fx0, fx0 + Wf, fy0, fy1, n);
     const layout = c.str('layout');
+    interior(fx0, fx0 + Wf, fy0, fy1, n, layout === 'doors');
     if (layout === 'drawers') {
       drawerStack(fx0, Wf, Hf > 0.42 ? 2 : 1, n, fy0, fy1);
     } else if (layout === 'mixed' && n >= 3) {
@@ -751,12 +781,12 @@ function buildCabinet(c: Ctx, variant: string) {
     const dr = Math.max(1, c.num('drawers'));
     const open = c.flag('openShelf');
     const lowerH = open ? Hf * 0.32 : 0;
-    interior(fx0, fx0 + Wf, fy0 + lowerH, fy1, 2);
+    interior(fx0, fx0 + Wf, fy0 + lowerH, fy1, 2, false);
     if (open) c.box(m.frame, [Wf, 0.018, Dc - 0.03], [0, fy0 + lowerH, zc - 0.012], 0.002);
     drawerStack(fx0, Wf, dr, 1, fy0 + lowerH + (open ? 0.012 : 0), fy1);
   } else if (variant === 'dresser') {
     const cols = W > 1.3 ? 2 : 1;
-    interior(fx0, fx0 + Wf, fy0, fy1, cols);
+    interior(fx0, fx0 + Wf, fy0, fy1, cols, false);
     drawerStack(fx0, Wf, Math.max(3, c.num('rows')), cols, fy0, fy1);
   }
 

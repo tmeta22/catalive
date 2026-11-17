@@ -14,8 +14,9 @@ function mats(): Mats {
 
 function piece(id: string) {
   const p = getProduct(id)!;
-  const group = buildFurniture(p, defaultConfig(p), mats());
-  return { p, group };
+  const m = mats();
+  const group = buildFurniture(p, defaultConfig(p), m);
+  return { p, group, m };
 }
 
 test('cabinet doors are tagged and can be opened', () => {
@@ -60,6 +61,27 @@ test('drawers slide out and return', () => {
   for (let i = 0; i < 40; i++) ix.update(1 / 60);
   assert.ok(Math.abs(d.object.position.z - z) < 0.01, 'the drawer slid back');
   disposeGroup(group);
+  clearGeometryCache();
+});
+
+test('drawers are real trays, not floating fronts', () => {
+  for (const id of ['nightstand', 'dresser', 'desk']) {
+    const { group, m } = piece(id);
+    const ix = new Interaction(new THREE.PerspectiveCamera());
+    ix.refresh(group);
+    const drawers = ix.parts.filter((p) => p.spec.kind === 'drawer');
+    assert.ok(drawers.length > 0, `${id} has drawers`);
+    for (const d of drawers) {
+      assert.ok(d.object.children.length >= 5, `${id} drawer has a front and a tray`);
+      let lining = 0;
+      d.object.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh && mesh.material === m.inside) lining++;
+      });
+      assert.ok(lining >= 3, `${id} drawer has sides, floor and back`);
+    }
+    disposeGroup(group);
+  }
   clearGeometryCache();
 });
 
